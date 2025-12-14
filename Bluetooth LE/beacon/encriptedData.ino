@@ -18,13 +18,10 @@ const uint8_t MASTER_KEY[32] = {
   0x3e, 0x0f, 0x5a, 0xf8, 0x30, 0x9c, 0x83, 0xf0
 };
 
-// Contador de seguridad (Anti-Replay)
-// En Nivel 3 lo guardaremos en memoria permanente. Por ahora se resetea al apagar.
+// Contador de seguridad (Anti-Replay). Se resetea al apagar.
 uint32_t ctr = 0; 
 
 BLEAdvertising *pAdvertising;
-
-// --- FUNCIONES DE AYUDA CRIPTOGRÁFICA ---
 
 // Función genérica para calcular HMAC-SHA256
 void hmac_sha256(const uint8_t* key, size_t keylen, const uint8_t* data, size_t datalen, uint8_t out[32]) {
@@ -55,7 +52,7 @@ void setup() {
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
 
-  // Inicializamos BLE pero con un nombre VACÍO para ser más discretos
+  // Se inicializa BLE pero con un nombre VACÍO 
   BLEDevice::init(""); 
   pAdvertising = BLEDevice::getAdvertising();
   
@@ -81,11 +78,11 @@ void loop() {
   derive_session_key(ctr, session_key);
 
   // 3. CIFRAR EL DATO (Confidencialidad)
-  // Usamos el primer byte de la clave de sesión como máscara XOR
+  // Se usa el primer byte de la clave de sesión como máscara XOR
   uint8_t encrypted_status = real_status ^ session_key[0];
 
   // 4. FIRMAR EL PAQUETE (Autenticidad)
-  // Queremos firmar: [CTR (4 bytes)] + [DatoCifrado (1 byte)]
+  // Se quiere firmar: [CTR (4 bytes)] + [DatoCifrado (1 byte)]
   uint8_t data_to_sign[5];
   data_to_sign[0] = (ctr >> 24) & 0xFF;
   data_to_sign[1] = (ctr >> 16) & 0xFF;
@@ -100,7 +97,7 @@ void loop() {
   // Estructura: [ID (2)] + [CTR (4)] + [EncData (1)] + [Firma (6)] = 13 bytes
   uint8_t payload[13];
   
-  // ID Fabricante (Fake)
+  // ID Fabricante de prueba
   payload[0] = 0xFF; 
   payload[1] = 0xFF;
   
@@ -118,16 +115,22 @@ void loop() {
     payload[7+i] = signature[i];
   }
 
-  // Debug por Serial para que entiendas lo que pasa
+  // Debug: Mostrar estado
   Serial.printf("CTR: %d | Real: %d | Cifrado: 0x%02X\n", ctr, real_status, encrypted_status);
 
   // 6. ENVIAR (Advertising)
   BLEAdvertisementData oAdvertisementData = BLEAdvertisementData();
-  oAdvertisementData.setFlags(0x04);
+  oAdvertisementData.setFlags(0x06);
   
   // Conversión eficiente para inyectar el array binario
-  std::string strPayload((char*)payload, 13);
-  oAdvertisementData.setManufacturerData(strPayload.c_str());
+  String strPayload = "";
+  
+  // Lo forzamos a concatenar byte por byte. 
+  // El objeto String de Arduino SÍ permite ceros internos si se añaden así.
+  for (int i = 0; i < 13; i++) {
+    strPayload += (char)payload[i];
+  }
+  oAdvertisementData.setManufacturerData(strPayload);
 
   pAdvertising->setAdvertisementData(oAdvertisementData);
   pAdvertising->start();
